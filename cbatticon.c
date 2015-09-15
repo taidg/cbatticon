@@ -115,6 +115,7 @@ struct configuration {
     gboolean debug_output;
 } configuration = {
     DEFAULT_UPDATE_INTERVAL,
+    DEFAULT_WEIGHT,
     UNKNOWN_ICON,
     DEFAULT_LOW_LEVEL,
     DEFAULT_CRITICAL_LEVEL,
@@ -251,6 +252,12 @@ static gint get_options (int argc, char **argv)
     if (configuration.update_interval <= 0) {
         configuration.update_interval = DEFAULT_UPDATE_INTERVAL;
         g_printerr (_("Invalid update interval! It has been reset to default (%d seconds)\n"), DEFAULT_UPDATE_INTERVAL);
+    }
+
+    /* option : moving average weight */
+    if (configuration.weight <= 0 || configuration.weight > 1) {
+        configuration.weight = DEFAULT_WEIGHT;
+        g_printerr (_("Invalid weight coefficient! It has been reset to default (%.2f)\n"), DEFAULT_WEIGHT);
     }
 
     /* option : low and critical levels */
