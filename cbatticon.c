@@ -77,6 +77,7 @@ static gchar* get_icon_name (gint state, gint percentage);
 #define SYSFS_PATH "/sys/class/power_supply"
 
 #define DEFAULT_UPDATE_INTERVAL 5
+#define DEFAULT_WEIGHT          0.1
 #define DEFAULT_LOW_LEVEL       20
 #define DEFAULT_CRITICAL_LEVEL  5
 
@@ -102,6 +103,7 @@ enum {
 
 struct configuration {
     gint     update_interval;
+    gdouble  weight;
     gint     icon_type;
     gint     low_level;
     gint     critical_level;
@@ -126,6 +128,11 @@ struct configuration {
 
 static gchar *battery_path = NULL;
 static gchar *ac_path      = NULL;
+
+/*
+ * store previous time value for weighted average
+ */
+static gint previous_time = -1;
 
 /*
  * workaround for limited/bugged batteries/drivers that don't provide current rate
@@ -154,6 +161,7 @@ static gint get_options (int argc, char **argv)
         { "version"               , 'v', 0, G_OPTION_ARG_NONE  , &display_version                     , N_("Display the version")                                      , NULL },
         { "debug"                 , 'd', 0, G_OPTION_ARG_NONE  , &configuration.debug_output          , N_("Display debug information")                                , NULL },
         { "update-interval"       , 'u', 0, G_OPTION_ARG_INT   , &configuration.update_interval       , N_("Set update interval (in seconds)")                         , NULL },
+        { "weight"                , 'w', 0, G_OPTION_ARG_DOUBLE   , &configuration.weight                , N_("Set weight coefficient(0 - 1) for exponential average") , NULL },
         { "icon-type"             , 'i', 0, G_OPTION_ARG_STRING, &icon_type_string                    , N_("Set icon type ('standard', 'notification' or 'symbolic')") , NULL },
         { "low-level"             , 'l', 0, G_OPTION_ARG_INT   , &configuration.low_level             , N_("Set low battery level (in percent)")                       , NULL },
         { "critical-level"        , 'r', 0, G_OPTION_ARG_INT   , &configuration.critical_level        , N_("Set critical battery level (in percent)")                  , NULL },
@@ -575,9 +583,20 @@ static gboolean get_battery_charge (gboolean remaining, gint *percentage, gint *
 
     if (remaining == TRUE) {
         *time = (gint)(remaining_capacity / current_rate * 60.0);
+        //apply weighted average
+        if (previous_time != -1) {
+            *time = (gint) (*time * configuration.weight + (1 - configuration.weight) * previous_time);
+        }
+
     } else {
         *time = (gint)((full_capacity - remaining_capacity) / current_rate * 60.0);
+        //apply weighted average
+        if (previous_time != -1) {
+            *time = (gint) (*time * configuration.weight + (1 - configuration.weight) * previous_time);
+        }
     }
+
+    previous_time = *time;
 
     return TRUE;
 }
@@ -598,7 +617,7 @@ static gboolean get_battery_time_estimation (gdouble remaining_capacity, gdouble
         gdouble estimation_current_rate = (remaining_capacity - estimation_remaining_capacity) / estimation_elapsed;
         gdouble estimation_seconds = (y - remaining_capacity) / estimation_current_rate;
 
-        *time = (gint)(estimation_seconds / 60.0);
+        *time = (gint)((estimation_seconds) / 60.0);
 
         estimation_remaining_capacity = remaining_capacity;
         estimation_time               = *time;
@@ -737,6 +756,9 @@ static void update_tray_icon_status (GtkStatusIcon *tray_icon)
             if (old_battery_status != CHARGING && estimation_needed == TRUE) {
                 reset_battery_time_estimation ();
             }
+            if (old_battery_status != CHARGING) {
+                previous_time = -1;
+            }
 
             if (get_battery_charge (FALSE, &percentage, &time) == FALSE) {
                 return;
@@ -749,6 +771,10 @@ static void update_tray_icon_status (GtkStatusIcon *tray_icon)
         case NOT_CHARGING:
             if (old_battery_status != DISCHARGING && estimation_needed == TRUE) {
                 reset_battery_time_estimation ();
+            }
+
+            if (old_battery_status != DISCHARGING) {
+                previous_time = -1;
             }
 
             if (get_battery_charge (TRUE, &percentage, &time) == FALSE) {
