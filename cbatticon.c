@@ -590,19 +590,28 @@ static gboolean get_battery_charge (gboolean remaining, gint *percentage, gint *
 
     if (remaining == TRUE) {
         *time = (gint)(remaining_capacity / current_rate * 60.0);
+
+        //sanity check
+        //don't add unreasonable times to approximation (may occur just after unplugged)
+        if (*time > 2000) {
+            return TRUE;
+        }
+
         //apply weighted average
         if (previous_time != -1) {
             *time = (gint) (*time * configuration.weight + (1 - configuration.weight) * previous_time);
         }
 
+
     } else {
         *time = (gint)((full_capacity - remaining_capacity) / current_rate * 60.0);
 
-	//sanity check
-	//don't add unreasonable times to approximation (may occur just after plugged in)
-        if (*time > 300) {
+        //sanity check
+        //don't add unreasonable times to approximation (may occur just after plugged in)
+        if (*time > 800) {
             return TRUE;
         }
+
         //apply weighted average
         if (previous_time != -1) {
             *time = (gint) (*time * configuration.weight + (1 - configuration.weight) * previous_time);
